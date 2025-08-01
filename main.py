@@ -7,6 +7,8 @@ from pydantic import BaseModel
 import google.generativeai as genai
 from dotenv import load_dotenv
 import os
+import uuid
+
 from tts import generate_audio  # 🔥 Import your TTS generator
 
 # Load environment variables
@@ -42,12 +44,15 @@ async def chat(q: Question):
         if not reply_text:
             raise ValueError("Gemini API did not return any text.")
 
-        # 🔊 Generate ElevenLabs audio
-        generate_audio(reply_text, "static/audio/azmuth.mp3")
+        # 🔊 Generate unique filename for each TTS
+        filename = f"{uuid.uuid4().hex}.mp3"
+        filepath = os.path.join("static", "audio", filename)
+
+        generate_audio(reply_text, filepath)
 
         return JSONResponse(content={
             "reply": reply_text,
-            "audio_url": "/static/audio/azmuth.mp3"
+            "audio_url": f"/static/audio/{filename}"
         })
 
     except Exception as e:
