@@ -9,15 +9,11 @@ from dotenv import load_dotenv
 import os
 import uuid
 
-from tts import generate_audio  # 🔥 Import your TTS generator
+from tts import generate_audio
 
-# Load environment variables
 load_dotenv()
-
-# Configure Gemini API
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
-# FastAPI app setup
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
@@ -44,11 +40,13 @@ async def chat(q: Question):
         if not reply_text:
             raise ValueError("Gemini API did not return any text.")
 
-        # 🔊 Generate unique filename for each TTS
+        # 🔊 Generate unique filename
         filename = f"{uuid.uuid4().hex}.mp3"
         filepath = os.path.join("static", "audio", filename)
 
-        generate_audio(reply_text, filepath)
+        success = generate_audio(reply_text, filepath)
+        if not success:
+            raise HTTPException(status_code=500, detail="TTS generation failed.")
 
         return JSONResponse(content={
             "reply": reply_text,
@@ -56,5 +54,5 @@ async def chat(q: Question):
         })
 
     except Exception as e:
-        print("Chat error:", e)
-        raise HTTPException(status_code=500, detail="Something went wrong with Gemini.")
+        print("❌ Chat error:", e)
+        raise HTTPException(status_code=500, detail="Something went wrong with Gemini or TTS.")
