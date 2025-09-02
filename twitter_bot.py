@@ -1,11 +1,11 @@
 import os
 import tweepy
-import requests
+import time
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# Load Twitter credentials
+# Load Twitter credentials from environment variables
 API_KEY = os.getenv("TWITTER_API_KEY")
 API_KEY_SECRET = os.getenv("TWITTER_API_KEY_SECRET")
 ACCESS_TOKEN = os.getenv("TWITTER_ACCESS_TOKEN")
@@ -16,33 +16,45 @@ BEARER_TOKEN = os.getenv("TWITTER_BEARER_TOKEN")
 auth = tweepy.OAuth1UserHandler(API_KEY, API_KEY_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
 api = tweepy.API(auth)
 
-print("✅ Twitter bot authenticated!")
-
-# Function to reply to mentions
+# ============= Auto Reply to Mentions =============
 def reply_to_mentions():
-    mentions = api.mentions_timeline(count=5)
-    for mention in mentions:
-        print(f"👀 Mention by {mention.user.screen_name}: {mention.text}")
+    last_seen_id_file = "last_seen_id.txt"
 
-        # Skip replying to yourself
-        if mention.user.screen_name == "your_twitter_username":
-            continue
+    # Load last seen ID
+    if os.path.exists(last_seen_id_file):
+        with open(last_seen_id_file, "r") as f:
+            last_seen_id = int(f.read().strip())
+    else:
+        last_seen_id = None
 
-        # Send text to your chatbot backend
-        response = requests.post(
-            "https://your-app.onrender.com/chat",
-            json={"message": mention.text}
-        )
+    mentions = api.mentions_timeline(since_id=last_seen_id, tweet_mode="extended")
 
-        if response.status_code == 200:
-            bot_reply = response.json().get("reply", "⚠️ No response")
-            print(f"🤖 Bot reply: {bot_reply}")
+    for mention in reversed(mentions):
+        print(f"Replying to {mention.user.screen_name}: {mention.full_text}")
 
-            # Post reply to Twitter
-            api.update_status(
-                status=f"@{mention.user.screen_name} {bot_reply}",
-                in_reply_to_status_id=mention.id
-            )
+        reply_text = f"Hi @{mention.user.screen_name}, thanks for tagging me! 🚀"
+        api.update_status(status=reply_text, in_reply_to_status_id=mention.id)
+
+        # Save last seen ID
+        with open(last_seen_id_file, "w") as f:
+            f.write(str(mention.id))
+
+# ============= Scheduled Tweets =============
+def scheduled_tweets():
+    tweet_text = "This is an automated tweet from my Render-hosted AI bot! 🤖✨"
+    api.update_status(tweet_text)
+    print("✅ Scheduled tweet sent!")
+
+# ============= Main Loop =============
+def run_bot():
+    while True:
+        try:
+            reply_to_mentions()
+            scheduled_tweets()
+        except Exception as e:
+            print("⚠️ Error:", e)
+
+        time.sleep(60)  # Run every 1 minute
 
 if __name__ == "__main__":
-    reply_to_mentions()
+    run_bot()
