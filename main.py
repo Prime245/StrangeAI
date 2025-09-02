@@ -1,81 +1,61 @@
 import os
-import threading
-import time
 import tweepy
-import google.generativeai as genai
-from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+import time
 
-# ---------------------------
-# FastAPI setup
-# ---------------------------
-app = FastAPI()
+# Load Twitter credentials from environment
+API_KEY = os.getenv("TWITTER_API_KEY")
+API_KEY_SECRET = os.getenv("TWITTER_API_KEY_SECRET")
+ACCESS_TOKEN = os.getenv("TWITTER_ACCESS_TOKEN")
+ACCESS_TOKEN_SECRET = os.getenv("TWITTER_ACCESS_TOKEN_SECRET")
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
+def check_env_vars():
+    print("🔍 Checking Twitter environment variables...")
+    if not API_KEY:
+        print("❌ Missing: TWITTER_API_KEY")
+    if not API_KEY_SECRET:
+        print("❌ Missing: TWITTER_API_KEY_SECRET")
+    if not ACCESS_TOKEN:
+        print("❌ Missing: TWITTER_ACCESS_TOKEN")
+    if not ACCESS_TOKEN_SECRET:
+        print("❌ Missing: TWITTER_ACCESS_TOKEN_SECRET")
+    if all([API_KEY, API_KEY_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET]):
+        print("✅ All Twitter API environment variables are set.")
 
-@app.get("/")
-def read_index():
-    return FileResponse("index.html")
+def create_client():
+    try:
+        auth = tweepy.OAuth1UserHandler(API_KEY, API_KEY_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
+        api = tweepy.API(auth)
+        api.verify_credentials()
+        print("✅ Twitter authentication successful!")
+        return api
+    except Exception as e:
+        print(f"❌ Error during authentication: {e}")
+        return None
 
+def run_bot():
+    check_env_vars()
+    api = create_client()
+    if not api:
+        print("⚠️ Bot stopped: Authentication failed.")
+        return
+    
+    print("🤖 Bot is running... Listening for mentions...")
 
-# ---------------------------
-# Gemini Setup
-# ---------------------------
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-model = genai.GenerativeModel("gemini-1.5-flash")
+    last_seen_id = None
 
-
-# ---------------------------
-# Twitter Bot Setup
-# ---------------------------
-TW_CONSUMER_KEY = os.getenv("TWITTER_API_KEY")
-TW_CONSUMER_SECRET = os.getenv("TWITTER_API_SECRET")
-TW_ACCESS_TOKEN = os.getenv("TWITTER_ACCESS_TOKEN")
-TW_ACCESS_SECRET = os.getenv("TWITTER_ACCESS_SECRET")
-TW_BEARER_TOKEN = os.getenv("TWITTER_BEARER_TOKEN")
-
-auth = tweepy.OAuth1UserHandler(
-    TW_CONSUMER_KEY, TW_CONSUMER_SECRET,
-    TW_ACCESS_TOKEN, TW_ACCESS_SECRET
-)
-api = tweepy.API(auth)
-
-
-def reply_to_mentions():
-    """Background loop that replies to mentions"""
-    since_id = None
     while True:
         try:
-            mentions = api.mentions_timeline(since_id=since_id, tweet_mode="extended")
+            mentions = api.mentions_timeline(since_id=last_seen_id, tweet_mode="extended")
             for mention in reversed(mentions):
-                print(f"New mention from @{mention.user.screen_name}: {mention.full_text}")
-                since_id = mention.id
-
-                # Generate reply using Gemini
-                response = model.generate_content(f"Reply politely to: {mention.full_text}")
-                reply_text = response.text.strip()
-
-                api.update_status(
-                    status=f"@{mention.user.screen_name} {reply_text}",
-                    in_reply_to_status_id=mention.id
-                )
-                print(f"Replied to @{mention.user.screen_name}")
-
+                print(f"📨 New mention from @{mention.user.screen_name}: {mention.full_text}")
+                last_seen_id = mention.id
+                reply_text = f"Hello @{mention.user.screen_name}, thanks for mentioning me!"
+                api.update_status(status=reply_text, in_reply_to_status_id=mention.id)
+                print(f"✅ Replied to @{mention.user.screen_name}")
         except Exception as e:
-            print("Error in bot loop:", e)
+            print(f"⚠️ Error in bot loop: {e}")
+        
+        time.sleep(30)  # check every 30 seconds
 
-        time.sleep(30)  # wait before checking again
-
-
-# ---------------------------
-# Start background thread with FastAPI
-# ---------------------------
-def start_bot_thread():
-    bot_thread = threading.Thread(target=reply_to_mentions, daemon=True)
-    bot_thread.start()
-
-@app.on_event("startup")
-def startup_event():
-    print("🚀 Starting Twitter bot in background...")
-    start_bot_thread()
+if __name__ == "__main__":
+    run_bot()
