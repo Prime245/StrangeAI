@@ -1,61 +1,66 @@
 import os
-import tweepy
 import time
+import threading
+import tweepy
+from fastapi import FastAPI
+from dotenv import load_dotenv
 
-# Load Twitter credentials from environment
+# Load .env file (useful for local dev, Render injects env automatically)
+load_dotenv()
+
+# ==========================
+# Setup FastAPI app
+# ==========================
+app = FastAPI()
+
+@app.get("/")
+def home():
+    return {"status": "✅ Twitter bot is running"}
+
+# ==========================
+# Twitter Authentication
+# ==========================
 API_KEY = os.getenv("TWITTER_API_KEY")
-API_KEY_SECRET = os.getenv("TWITTER_API_KEY_SECRET")
+API_SECRET = os.getenv("TWITTER_API_KEY_SECRET")
 ACCESS_TOKEN = os.getenv("TWITTER_ACCESS_TOKEN")
-ACCESS_TOKEN_SECRET = os.getenv("TWITTER_ACCESS_TOKEN_SECRET")
+ACCESS_SECRET = os.getenv("TWITTER_ACCESS_TOKEN_SECRET")
+BEARER_TOKEN = os.getenv("TWITTER_BEARER_TOKEN")
 
-def check_env_vars():
-    print("🔍 Checking Twitter environment variables...")
-    if not API_KEY:
-        print("❌ Missing: TWITTER_API_KEY")
-    if not API_KEY_SECRET:
-        print("❌ Missing: TWITTER_API_KEY_SECRET")
-    if not ACCESS_TOKEN:
-        print("❌ Missing: TWITTER_ACCESS_TOKEN")
-    if not ACCESS_TOKEN_SECRET:
-        print("❌ Missing: TWITTER_ACCESS_TOKEN_SECRET")
-    if all([API_KEY, API_KEY_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET]):
-        print("✅ All Twitter API environment variables are set.")
+if not all([API_KEY, API_SECRET, ACCESS_TOKEN, ACCESS_SECRET]):
+    print("⚠️ Missing Twitter credentials in environment variables!")
 
-def create_client():
-    try:
-        auth = tweepy.OAuth1UserHandler(API_KEY, API_KEY_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
-        api = tweepy.API(auth)
-        api.verify_credentials()
-        print("✅ Twitter authentication successful!")
-        return api
-    except Exception as e:
-        print(f"❌ Error during authentication: {e}")
-        return None
+auth = tweepy.OAuth1UserHandler(API_KEY, API_SECRET, ACCESS_TOKEN, ACCESS_SECRET)
+api = tweepy.API(auth)
 
+# ==========================
+# Bot Logic
+# ==========================
 def run_bot():
-    check_env_vars()
-    api = create_client()
-    if not api:
-        print("⚠️ Bot stopped: Authentication failed.")
-        return
-    
-    print("🤖 Bot is running... Listening for mentions...")
-
-    last_seen_id = None
-
+    last_checked_id = None
     while True:
         try:
-            mentions = api.mentions_timeline(since_id=last_seen_id, tweet_mode="extended")
+            print("🤖 Bot loop running...")
+
+            mentions = api.mentions_timeline(
+                since_id=last_checked_id, tweet_mode="extended"
+            )
             for mention in reversed(mentions):
-                print(f"📨 New mention from @{mention.user.screen_name}: {mention.full_text}")
-                last_seen_id = mention.id
+                print(f"💬 Mention from @{mention.user.screen_name}: {mention.full_text}")
+                last_checked_id = mention.id
+
+                # Example: auto-reply
                 reply_text = f"Hello @{mention.user.screen_name}, thanks for mentioning me!"
-                api.update_status(status=reply_text, in_reply_to_status_id=mention.id)
+                api.update_status(
+                    status=reply_text,
+                    in_reply_to_status_id=mention.id,
+                    auto_populate_reply_metadata=True,
+                )
                 print(f"✅ Replied to @{mention.user.screen_name}")
+
+            time.sleep(60)  # wait before checking again
         except Exception as e:
             print(f"⚠️ Error in bot loop: {e}")
-        
-        time.sleep(30)  # check every 30 seconds
+            time.sleep(60)
 
-if __name__ == "__main__":
-    run_bot()
+# Run bot in a background thread
+threading.Thread(target=run_bot, daemon=True).start()
