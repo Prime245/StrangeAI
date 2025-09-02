@@ -119,16 +119,7 @@ button:hover {
   }
 }
 
-.speak-button {
-  margin-left: 10px;
-  padding: 2px 8px;
-  font-size: 0.9em;
-  background-color: #ffaa00;
-  color: black;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-}
+
 
 .speak-button:hover {
   background-color: #ffc34d;

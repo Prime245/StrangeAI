@@ -4,20 +4,6 @@ const input = document.getElementById("user-input");
 const chatBox = document.getElementById("chat-box");
 const micBtn = document.getElementById("mic-btn");
 
-let currentAudio = null;
-let isSpeaking = false;
-
-// 🔓 Unlock audio context
-document.body.addEventListener(
-  "click",
-  () => {
-    const unlock = new Audio();
-    unlock.play().catch(() => {});
-    console.log("🔓 Audio context unlocked");
-  },
-  { once: true }
-);
-
 // 📨 Send user message and handle response
 async function sendMessage() {
   const userMessage = input.value.trim();
@@ -42,33 +28,6 @@ async function sendMessage() {
 
     msgElem.innerText = data.reply || "Strange had no reply.";
     chatBox.scrollTop = chatBox.scrollHeight;
-
-    if (data.audio_url) {
-      console.log("🎧 Audio URL received:", data.audio_url);
-
-      // Stop previous audio if still playing
-      if (currentAudio) {
-        currentAudio.pause();
-        currentAudio.currentTime = 0;
-        isSpeaking = false;
-        currentAudio = null;
-      }
-
-      currentAudio = new Audio(`${data.audio_url}?t=${Date.now()}`);
-
-   currentAudio.addEventListener("canplaythrough", () => {
-  console.log("✅ Audio ready to play (awaiting user interaction)");
-});
-
-
-      currentAudio.onended = () => {
-        isSpeaking = false;
-        console.log("🔚 Voice playback ended");
-      };
-
-      // Enable Speak button
-      document.getElementById("speak-btn").disabled = false;
-    }
   } catch (error) {
     console.error("❌ Chat fetch error:", error);
     msgElem.innerText = "Strange is unavailable right now 😞";
@@ -116,32 +75,3 @@ input.addEventListener("keypress", function (e) {
 
 // 🚀 Focus input on load
 window.onload = () => input.focus();
-
-// 🗣️ Speak/Stop button
-document.addEventListener("DOMContentLoaded", () => {
-  const speakBtn = document.createElement("button");
-  speakBtn.innerText = "🗣️ Speak/Stop";
-  speakBtn.id = "speak-btn";
-  speakBtn.disabled = true;
-  speakBtn.style.marginLeft = "10px";
-
-  speakBtn.addEventListener("click", () => {
-    if (currentAudio) {
-      if (!isSpeaking) {
-        currentAudio.play()
-          .then(() => {
-            isSpeaking = true;
-            console.log("🎵 Playing Azmuth's voice");
-          })
-          .catch((err) => console.error("❌ Audio play error:", err));
-      } else {
-        currentAudio.pause();
-        currentAudio.currentTime = 0;
-        isSpeaking = false;
-        console.log("⏹️ Stopped voice");
-      }
-    }
-  });
-
-  document.querySelector(".input-container").appendChild(speakBtn);
-});
