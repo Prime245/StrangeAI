@@ -5,7 +5,7 @@ import tweepy
 from fastapi import FastAPI
 from dotenv import load_dotenv
 
-# Load .env file (useful for local dev, Render injects env automatically)
+# Load .env file (local dev only — Render injects env vars automatically)
 load_dotenv()
 
 # ==========================
@@ -15,10 +15,10 @@ app = FastAPI()
 
 @app.get("/")
 def home():
-    return {"status": "✅ Twitter bot is running"}
+    return {"status": "✅ Twitter bot (API v2) is running"}
 
 # ==========================
-# Twitter Authentication
+# Twitter Authentication (API v2)
 # ==========================
 API_KEY = os.getenv("TWITTER_API_KEY")
 API_SECRET = os.getenv("TWITTER_API_KEY_SECRET")
@@ -26,14 +26,25 @@ ACCESS_TOKEN = os.getenv("TWITTER_ACCESS_TOKEN")
 ACCESS_SECRET = os.getenv("TWITTER_ACCESS_TOKEN_SECRET")
 BEARER_TOKEN = os.getenv("TWITTER_BEARER_TOKEN")
 
-if not all([API_KEY, API_SECRET, ACCESS_TOKEN, ACCESS_SECRET]):
+if not all([API_KEY, API_SECRET, ACCESS_TOKEN, ACCESS_SECRET, BEARER_TOKEN]):
     print("⚠️ Missing Twitter credentials in environment variables!")
 
-auth = tweepy.OAuth1UserHandler(API_KEY, API_SECRET, ACCESS_TOKEN, ACCESS_SECRET)
-api = tweepy.API(auth)
+client = tweepy.Client(
+    bearer_token=BEARER_TOKEN,
+    consumer_key=API_KEY,
+    consumer_secret=API_SECRET,
+    access_token=ACCESS_TOKEN,
+    access_token_secret=ACCESS_SECRET,
+    wait_on_rate_limit=True
+)
+
+# Get your own user ID (needed for mentions)
+me = client.get_me()
+MY_USER_ID = me.data.id
+print(f"✅ Authenticated as {me.data.username} (user_id={MY_USER_ID})")
 
 # ==========================
-# Bot Logic
+# Bot Logic (API v2)
 # ==========================
 def run_bot():
     last_checked_id = None
@@ -41,26 +52,30 @@ def run_bot():
         try:
             print("🤖 Bot loop running...")
 
-            mentions = api.mentions_timeline(
-                since_id=last_checked_id, tweet_mode="extended"
+            mentions = client.get_users_mentions(
+                id=MY_USER_ID,
+                since_id=last_checked_id,
+                max_results=5,
+                tweet_fields=["author_id","created_at"]
             )
-            for mention in reversed(mentions):
-                print(f"💬 Mention from @{mention.user.screen_name}: {mention.full_text}")
-                last_checked_id = mention.id
 
-                # Example: auto-reply
-                reply_text = f"Hello @{mention.user.screen_name}, thanks for mentioning me!"
-                api.update_status(
-                    status=reply_text,
-                    in_reply_to_status_id=mention.id,
-                    auto_populate_reply_metadata=True,
-                )
-                print(f"✅ Replied to @{mention.user.screen_name}")
+            if mentions.data:
+                for mention in reversed(mentions.data):
+                    print(f"💬 Mention from user_id={mention.author_id}: {mention.text}")
+                    last_checked_id = mention.id
 
-            time.sleep(60)  # wait before checking again
+                    reply_text = f"Hello! Thanks for mentioning me 🤖"
+                    client.create_tweet(
+                        text=reply_text,
+                        in_reply_to_tweet_id=mention.id
+                    )
+                    print(f"✅ Replied to mention ID {mention.id}")
+
+            time.sleep(60)
+
         except Exception as e:
             print(f"⚠️ Error in bot loop: {e}")
             time.sleep(60)
 
-# Run bot in a background thread
+# Run bot in background thread
 threading.Thread(target=run_bot, daemon=True).start()
